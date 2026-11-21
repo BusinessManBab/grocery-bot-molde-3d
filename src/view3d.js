@@ -825,8 +825,8 @@ export async function createWorld3d(opts) {
     };
     // "town": within ~35 m of any building
     const cell = 8, cols = Math.ceil(W / cell), rows = Math.ceil(D / cell), near = new Uint8Array(cols * rows), R = 4;
-    for (const b of extra.buildings) for (let i = 1; i < b.length; i += 2) {
-      const c = Math.floor((wx(b[i]) - X0) / cell), r = Math.floor((wy(b[i + 1]) - Z0) / cell);
+    for (const b of extra.buildings) for (let i = 0; i < b.ring.length; i += 2) {
+      const c = Math.floor((wx(b.ring[i]) - X0) / cell), r = Math.floor((wy(b.ring[i + 1]) - Z0) / cell);
       for (let rr = Math.max(0, r - R); rr <= Math.min(rows - 1, r + R); rr++) for (let cc = Math.max(0, c - R); cc <= Math.min(cols - 1, c + R); cc++) near[rr * cols + cc] = 1;
     }
     const inTown = (x, z) => near[Math.floor((z - Z0) / cell) * cols + Math.floor((x - X0) / cell)] === 1;
@@ -890,7 +890,7 @@ export async function createWorld3d(opts) {
         for (let s = 0; s <= steps; s++) mark(ax + (bx - ax) * s / steps, az + (bz - az) * s / steps, 14);
       }
     }
-    for (const b of extra.buildings) mark(wx(b[1]), wy(b[2]), 10);
+    for (const b of extra.buildings) for (let i = 0; i < b.ring.length; i += 2) mark(wx(b.ring[i]), wy(b.ring[i + 1]), 10);
     for (const p of game.players) mark(p.shop[0], p.shop[1], PLAZA + 10);
     return (x, z) => grid[Math.floor((z - Z0) / cell) * cols + Math.floor((x - X0) / cell)] === 1;
   }
