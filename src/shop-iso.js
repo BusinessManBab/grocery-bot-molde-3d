@@ -2,7 +2,9 @@
 // into a renderer the shop window drives frame by frame from the recorded match instead of the
 // homepage's own canned replay. Same isometric store, shelves, fridges, produce bins, bread racks,
 // Grocery Bots with their baskets, and trucks backing into the bays; the bots wear the player's
-// look and the trucks the player's colour.
+// look, and the trucks are the player's own map trucks (looks.js truckArt: same carriage, cab,
+// visor, decal, colour and expression) seen from the side, with the loading door at the rear.
+import { truckArt, mix, WOOD, HEADS } from './looks.js';
 const NS = 'http://www.w3.org/2000/svg';
 const A = 24, B = 12, SHELF = 21, WALL = 30, SLAB = 9, EDGE = .72;
 const TRUCK = { CARGO: 2.25, GAP: .07, CAB: .78, TOP: 31, CAB_TOP: 24, FLOOR: 6, PARKED: .97, AWAY: -15 };
@@ -53,11 +55,14 @@ export function createIsoShop(svg, layout) {
   svg.innerHTML = '';
 
   const walls = new Set(layout.grid.walls.map(([x, y]) => x + ',' + y));
+  // The recorded layout says which fixture each shelf cell belongs to (a department, see
+  // tools/simulate_match.py). Older files have no fixtures: fall back to the product.
+  const FIXTURE_AT = new Map((layout.fixtures || []).map(([x, y, kind]) => [x + ',' + y, kind]));
   const shelves = {}, fixtures = {};
   for (const [x, y, p] of layout.items) {
     const type = layout.products[p];
     shelves[x + ',' + y] = type;
-    fixtures[x + ',' + y] = FIXTURE_OF[type] || 'shelf';
+    fixtures[x + ',' + y] = FIXTURE_AT.get(x + ',' + y) || FIXTURE_OF[type] || 'shelf';
   }
   const bayX = new Set(BAYS.map(([x]) => x));
   const solid = (x, y) => walls.has(x + ',' + y) || (x + ',' + y) in shelves;
@@ -162,6 +167,30 @@ export function createIsoShop(svg, layout) {
   el('image', { href: 'static/assets/grocery-bot-icon.svg', width: 15, height: 15 }, sign);
   el('text', { x: 20, y: 12, 'font-family': 'Mulish, Arial, sans-serif', 'font-weight': 900, 'font-size': 12.5, fill: '#c8102e' }, sign).textContent = 'Grocery Bot';
 
+  // Department signs over each block, so the sections read as a real shop: dairy at the back,
+  // produce and bakery together, dry goods in the middle aisles (OTHER-CITIES.md change 4).
+  const DEPT_TONE = {
+    fridge: { fill: '#e8f3f8', edge: '#a9cbdc', ink: '#35627a' },
+    bin: { fill: '#eaf3e4', edge: '#9dbb8b', ink: '#40603a' },
+    rack: { fill: '#fbf0dd', edge: '#d7b98a', ink: '#775b33' },
+    shelf: { fill: '#f7f3ef', edge: '#d9cec5', ink: '#5f554e' },
+  };
+  for (const dept of layout.departments || []) {
+    if (!dept.cells || !dept.cells.length) continue;
+    const cx = dept.cells.reduce((sum, [x]) => sum + x + .5, 0) / dept.cells.length;
+    const cy = dept.cells.reduce((sum, [, y]) => sum + y + .5, 0) / dept.cells.length;
+    const z = (FIXTURES[dept.fixture] || FIXTURES.shelf).height + 9;
+    const [px, py] = P(cx, cy, z);
+    const tone = DEPT_TONE[dept.fixture] || DEPT_TONE.shelf;
+    const text = dept.name;
+    const w = text.length * 3.05 + 9;
+    const g = el('g', {}, layers[Math.min(layers.length - 1, Math.round(cx + cy))]);
+    const plane = el('g', { transform: `matrix(${A / unit} ${-B / unit} 0 1 ${px.toFixed(1)} ${py.toFixed(1)})` }, g);
+    el('rect', { x: (-w / 2).toFixed(1), y: -7, width: w.toFixed(1), height: 8, rx: 2.4, fill: tone.fill, stroke: tone.edge, 'stroke-width': .6 }, plane);
+    el('text', { x: 0, y: -1.3, 'text-anchor': 'middle', 'font-family': 'Mulish, Arial, sans-serif', 'font-weight': 800,
+                 'font-size': 5.1, fill: tone.ink }, plane).textContent = text;
+  }
+
   // ---- bots ----------------------------------------------------------------------
   const bots = Array.from({ length: layout.botsPerPlayer }, () => {
     const g = el('g', { class: 'bot' });
@@ -181,41 +210,31 @@ export function createIsoShop(svg, layout) {
     return first - 1;
   }
 
-  // ---- trucks (arena.js truckMarkup, in the player's colour) ------------------------
-  const rr = (u0, u1, v0, v1, ru, rv) =>
-    `M${u0 + ru} ${v0}H${u1 - ru}A${ru} ${rv} 0 0 1 ${u1} ${v0 + rv}V${v1 - rv}A${ru} ${rv} 0 0 1 ${u1 - ru} ${v1}H${u0 + ru}A${ru} ${rv} 0 0 1 ${u0} ${v1 - rv}V${v0 + rv}A${ru} ${rv} 0 0 1 ${u0 + ru} ${v0}Z`;
-  const LOGO = '<path d="M-11.5 -6C-11.5 -15 -6.8 -19.5 0 -19.5S11.5 -15 11.5 -6C11.5 -2 9.4 0 5.2 0H-5.2C-9.4 0 -11.5 -2 -11.5 -6Z" fill="#fff"/>' +
-    '<ellipse cx="-4.2" cy="-9" rx="2.5" ry="3.5" fill="#c8102e"/><ellipse cx="4.2" cy="-9" rx="2.5" ry="3.5" fill="#c8102e"/>' +
-    '<path d="M-8.4 -26.6H8.4L6.8 -21H-6.8Z" fill="#fff"/>';
-  let paint = '#c8102e', eyes = '#fff';
+  // ---- trucks: the player's map truck art on the isometric side, loading door at the rear ----
+  let paint = '#c8102e';
 
   function truckMarkup(dock, s) {
-    const { CARGO, GAP, CAB, TOP, CAB_TOP, FLOOR } = TRUCK;
+    const { TOP, FLOOR } = TRUCK;
     const x0 = dock + .06, x1 = dock + .94, r = 0;
-    const c0 = r - CARGO, k1 = c0 - GAP, k0 = k1 - CAB;
     const v = z => -z;
-    const eyeU = [k0 + .2, k0 + .42];
     const door = 21 * (1 - s.open);
     const goodsColor = type => COLORS[type] || '#b3a994';
-    const [lx, ly] = P(x1, r - .18);
-    let out = `<polygon points="${pts([P(x0 - .04, k0 - .05), P(x1 + .2, k0 - .05), P(x1 + .2, r + .12), P(x0 - .04, r + .12)])}" fill="rgba(23,20,18,.13)"/>`;
+    // The same side-view art the 2D and 3D map trucks use (looks.js truckArt), projected onto
+    // the isometric side: svg x -74 (rear) … 71 (cab front) is 3.1 cells, svg y 38 is the ground
+    // and the 90-unit-tall art is 31 units tall. The rear face stays a loading door.
+    const truckLook = look || { carriage: 'box', head: 'flat', color: 'red', visor: 'none', decal: 'plain', eyes: 'dots' };
+    const head = HEADS[truckLook.head] || HEADS.flat;
+    const sideScale = 3.1 / 144, zScale = .344;
+    const cargoFront = -(14 + 74) * sideScale;
+    const cabFront = -(71 + 74) * sideScale, cabBack = -(18 + 74) * sideScale;
+    const cargoZ = (38 + 52) * zScale;
+    const cabZ = (38 - head.top) * zScale;
+    const cargoRoof = truckLook.carriage === 'canvas' ? mix(paint, '#ffffff', .78)
+      : truckLook.carriage === 'flatbed' ? WOOD : '#fbfaf8';
+    const roofZ = truckLook.carriage === 'flatbed' ? (38 - 4) * zScale : cargoZ;
+    let out = `<polygon points="${pts([P(x0 - .04, cabFront - .05), P(x1 + .2, cabFront - .05), P(x1 + .2, r + .12), P(x0 - .04, r + .12)])}" fill="rgba(23,20,18,.13)"/>`;
     out += `<g transform="translate(0 ${-(s.bounce || 0)})">`;
-    out += `<g transform="matrix(${-A} ${B} 0 1 ${x1 * A} ${x1 * B})">`;
-    out += `<path d="${rr(k0, k1, v(CAB_TOP), v(FLOOR - 1), .16, 5)}" fill="${paint}"/>`;
-    out += `<ellipse cx="${k1 - .2}" cy="${v(CAB_TOP - 5.5)}" rx=".07" ry="3" fill="#fff" opacity=".28"/>`;
-    out += s.happy
-      ? `<path d="${eyeU.map(u => `M${u - .08} ${v(15)}Q${u} ${v(21)} ${u + .08} ${v(15)}L${u + .05} ${v(15)}Q${u} ${v(18.4)} ${u - .05} ${v(15)}Z`).join('')}" fill="${eyes}"/>`
-      : eyeU.map(u => `<ellipse cx="${u}" cy="${v(16.5)}" rx=".075" ry="${s.blink ? .5 : 3.6}" fill="${eyes}"/>`).join('');
-    out += `<path d="${rr(c0, r, v(TOP), v(FLOOR - 1), .08, 3)}" fill="#f1ece8"/>`;
-    out += `<rect x="${c0}" y="${v(FLOOR + 2)}" width="${CARGO}" height="3" fill="${paint}"/>`;
-    out += `<rect x="${k0 + .05}" y="${v(FLOOR)}" width="${r - k0 - .1}" height="3.6" fill="#2b2522"/>`;
-    for (const u of [r - .45, c0 + .5, k0 + .32]) {
-      out += `<ellipse cx="${u}" cy="${v(3.4)}" rx=".15" ry="3.6" fill="#2b2522"/><ellipse cx="${u}" cy="${v(3.4)}" rx=".06" ry="1.5" fill="#cfc7c1"/>`;
-    }
-    out += '</g>';
-    out += `<g transform="matrix(${A / unit} ${-B / unit} 0 1 ${lx} ${ly - 15})">`;
-    out += `<rect x="0" y="-8" width="8.5" height="8.5" rx="2.2" fill="#c8102e"/><g transform="translate(4.25 -.3) scale(.22)">${LOGO}</g>`;
-    out += '<text x="11" y="-1.6" font-family="Mulish, Arial, sans-serif" font-weight="900" font-size="6.2" fill="#c8102e">Grocery Bot</text></g>';
+    out += `<g transform="matrix(${A * sideScale} ${-B * sideScale} 0 ${zScale} ${A * x1 + A * 74 * sideScale} ${B * x1 - B * 74 * sideScale - 38 * zScale})">${truckArt(truckLook, false)}</g>`;
     out += `<g transform="matrix(${A} ${B} 0 1 ${-r * A} ${r * B})">`;
     out += `<rect x="${x0}" y="${v(TOP)}" width="${x1 - x0}" height="${TOP - FLOOR + 1}" rx=".05" fill="#e2dcd6"/>`;
     out += `<rect x="${x0 + .07}" y="${v(TOP - 2)}" width="${x1 - x0 - .14}" height="${TOP - FLOOR - 3}" fill="#3d3532"/>`;
@@ -229,11 +248,12 @@ export function createIsoShop(svg, layout) {
       for (let i = 0; i < Math.floor(door / 3.2); i++) out += `<rect x="${x0 + .07}" y="${v(TOP - 2) + 3.2 * (i + 1)}" width="${x1 - x0 - .14}" height=".5" fill="#d6cfc9"/>`;
     }
     const lamp = s.hazard ? '#f2b441' : '#c8102e';
-    out += `<rect x="${x0 + .02}" y="${v(FLOOR + 1.6)}" width=".12" height="2.4" rx=".03" fill="${lamp}"/>`;
-    out += `<rect x="${x1 - .14}" y="${v(FLOOR + 1.6)}" width=".12" height="2.4" rx=".03" fill="${lamp}"/>`;
+    out += `<rect x="${x0 + .05}" y="${v(TOP - 3.4)}" width=".42" height="1.6" rx=".2" fill="${lamp}"/>`;
+    out += `<rect x="${x1 - .47}" y="${v(TOP - 3.4)}" width=".42" height="1.6" rx=".2" fill="${lamp}"/>`;
     out += `<rect x="${x0}" y="${v(FLOOR - .5)}" width="${x1 - x0}" height="3" fill="#2b2522"/></g>`;
-    out += `<polygon points="${pts([P(x0, k0 + .08, CAB_TOP), P(x1, k0 + .08, CAB_TOP), P(x1, k1, CAB_TOP), P(x0, k1, CAB_TOP)])}" fill="${shade(paint, .16)}"/>`;
-    out += `<polygon points="${pts([P(x0, c0, TOP), P(x1, c0, TOP), P(x1, r, TOP), P(x0, r, TOP)])}" fill="#fbfaf8"/>`;
+    out += `<polygon points="${pts([P(x0, cabFront, cabZ), P(x1, cabFront, cabZ), P(x1, cabBack, cabZ), P(x0, cabBack, cabZ)])}" fill="${shade(paint, .16)}"/>`;
+    out += `<polygon points="${pts([P(x0, cabBack, cabZ), P(x1, cabBack, cabZ), P(x1, cargoFront, cabZ), P(x0, cargoFront, cabZ)])}" fill="${shade(paint, .06)}"/>`;
+    out += `<polygon points="${pts([P(x0, cargoFront, roofZ), P(x1, cargoFront, roofZ), P(x1, r, roofZ), P(x0, r, roofZ)])}" fill="${cargoRoof}"/>`;
     return out + '</g>';
   }
 
@@ -318,7 +338,6 @@ export function createIsoShop(svg, layout) {
   function setPlayer(player) {
     look = player.look;
     paint = player.colour;
-    eyes = GB.light(paint) ? '#171412' : '#fff';
     for (const bot of bots) bot.key = '';
     for (const truck of trucks) truck.key = '';
   }
