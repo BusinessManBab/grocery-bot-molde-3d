@@ -6,6 +6,8 @@ built for **Molde** with the steps in [OTHER-CITIES.md](OTHER-CITIES.md):
 - Real terrain: the 3D map is draped over an elevation grid of Molde (`data/terrain.bin`,
   817 × 576 samples, 0–443 m, relief ×1.25). Roads, buildings, trees, shops, trucks
   (pitched on slopes) and trails follow the ground; the board edge shows the hills in section.
+- Aker Stadion uses its real OSM multipolygon: a blue stand ring around the green pitch, with
+the pitch outline and centre circle, and no trees on the footprint (`data/stadium.json`).
 - The real street network, water, the fjord and its islands, green areas and place names from
   OpenStreetMap (`data/game-map.json`), with 84 of 90 delivery homes matched to real building
   footprints (`data/buildings.json`). The map is padded south across Moldefjorden so the board is

@@ -24,13 +24,20 @@ export async function createWorld3d(opts) {
   const { host, overlay: ctx, view, town, game, play, wx, wy, truckAt, labels } = opts;
   let picks = [];                           // this frame's clickable shops and order houses, in screen pixels
   const { OPEN, DELIVERED, PARKED, TRAIL, POP_TICKS, INK } = opts.constants;
-  const [extra, relief, heights] = await Promise.all([
+  const [extra, relief, heights, stadium] = await Promise.all([
     fetch('data/buildings.json').then(res => res.json()),
     fetch('data/terrain.json').then(res => res.json()),
     fetch('data/terrain.bin').then(res => res.arrayBuffer()).then(buf => new Uint16Array(buf)),
+    // optional: a real landmark footprint that is a multipolygon in OSM, so not in buildings.json
+    fetch('data/stadium.json').then(res => res.ok ? res.json() : null).catch(() => null),
   ]);
   // optional: OSM forest/wood and open land (fields, built-up areas) for planting forests
   const cover = await fetch('data/landcover.json').then(res => res.ok ? res.json() : null).catch(() => null) || { wood: [], open: [] };
+  // Paint the pitch as green ground and keep the forest off the stadium footprint.
+  if (stadium?.inner?.length) town.green.push(stadium.inner);
+  const stadiumOuter = stadium?.outer?.length
+    ? Array.from({ length: stadium.outer.length / 2 }, (_, i) => [wx(stadium.outer[i * 2]), wy(stadium.outer[i * 2 + 1])])
+    : null;
 
   // ---- renderer, scene, camera ------------------------------------------------
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -242,6 +249,54 @@ export async function createWorld3d(opts) {
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.renderOrder = 20;
     scene.add(mesh);
+  }
+
+  // A landmark that is an OSM multipolygon (stadium = outer stand ring + inner pitch) is not in
+  // buildings.json. Draw the real footprint: blue stand ring around the green pitch.
+  if (stadium?.outer?.length && stadium.inner?.length) {
+    const ringOf = list => Array.from({ length: list.length / 2 }, (_, i) => new THREE.Vector2(wx(list[i * 2]), wy(list[i * 2 + 1])));
+    const outer = ringOf(stadium.outer), inner = ringOf(stadium.inner);
+    const top = Math.max(...outer.concat(inner).map(p => heightAt(p.x, p.y))) + 9;
+    // Stand surface: the real outer ring with the pitch as its hole.
+    const points = outer.concat(inner);
+    const faces = THREE.ShapeUtils.triangulateShape(outer, [inner]);
+    const seats = [];
+    for (const face of faces) for (const i of face) seats.push(points[i].x, top, points[i].y);
+    const seatGeo = new THREE.BufferGeometry();
+    seatGeo.setAttribute('position', new THREE.Float32BufferAttribute(seats, 3));
+    seatGeo.computeVertexNormals();
+    const standMesh = new THREE.Mesh(seatGeo, new THREE.MeshBasicMaterial({ color: '#3f6ea8', side: THREE.DoubleSide }));
+    standMesh.castShadow = true;
+    standMesh.renderOrder = 20;
+    scene.add(standMesh);
+    // Outer and inner walls down to the turf.
+    const walls = [];
+    for (const ring of [outer, inner]) for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length];
+      const ay = heightAt(a.x, a.y) - .4, by = heightAt(b.x, b.y) - .4;
+      walls.push(a.x, ay, a.y, b.x, by, b.y, b.x, top, b.y, a.x, ay, a.y, b.x, top, b.y, a.x, top, a.y);
+    }
+    const wallGeo = new THREE.BufferGeometry();
+    wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(walls, 3));
+    wallGeo.computeVertexNormals();
+    const wallMesh = new THREE.Mesh(wallGeo, litBoth('#ded8ce'));
+    wallMesh.castShadow = wallMesh.receiveShadow = true;
+    wallMesh.renderOrder = 20;
+    scene.add(wallMesh);
+    // Pitch outline and centre circle, so it reads as a football ground from above.
+    const pitch = inner.map(p => new THREE.Vector3(p.x, heightAt(p.x, p.y) + .45, p.y));
+    const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pitch), new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: .85 }));
+    outline.renderOrder = 21;
+    scene.add(outline);
+    const cx = inner.reduce((s, p) => s + p.x, 0) / inner.length, cz = inner.reduce((s, p) => s + p.y, 0) / inner.length;
+    const circle = [];
+    for (let i = 0; i < 40; i++) {
+      const a = i / 40 * Math.PI * 2;
+      circle.push(new THREE.Vector3(cx + Math.cos(a) * 8, heightAt(cx, cz) + .45, cz + Math.sin(a) * 8));
+    }
+    const centre = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(circle), new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: .85 }));
+    centre.renderOrder = 21;
+    scene.add(centre);
   }
 
   // Order homes: the real footprint at each address the game delivers to.
@@ -643,6 +698,7 @@ export async function createWorld3d(opts) {
       const px = x + (rand() - .5) * STEP * .9, pz = z + (rand() - .5) * STEP * .9;
       if (px < X0 + 3 || px > X1 - 3 || pz < Z0 + 3 || pz > Z1 - 3) continue;
       if (blocked(px, pz) || isWater(px, pz) || isWater(px + 8, pz) || isWater(px - 8, pz) || isWater(px, pz + 8) || isWater(px, pz - 8)) continue;
+      if (stadiumOuter && inside([px, pz], stadiumOuter)) continue;
       const mapped = woodAt(px, pz);
       if (!mapped && (inTown(px, pz) || within(open, px, pz) || within(parks, px, pz))) continue;
       // More and more trees towards the north (top) of the board; the wood mask adds on top.
