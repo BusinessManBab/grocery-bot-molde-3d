@@ -6,9 +6,11 @@ inside a shop, and an order card, which shows what a clicked order contains. Not
 Kongsberg: everything town-specific lives in `data/`. To do another town, you swap in that town's
 data files and publish a copy of the repo.
 
-Tested so far: Kongsberg end to end. Oslo's data files build with these steps (89 of 90
-delivery homes matched a real building, terrain 0–102 m), but no Oslo page has been published
-yet, because there is no Oslo replay (see step 2).
+Tested so far: Kongsberg end to end, and Molde end to end (published at
+https://businessmanbab.github.io/grocery-bot-molde-3d/ — 84 of 90 delivery homes matched a real
+building, terrain 0–443 m, shop window with the player's own map trucks and a department layout).
+Oslo's data files build with these steps (89 of 90 delivery homes matched a real building, terrain
+0–102 m), but no Oslo page has been published yet, because there is no Oslo replay (see step 2).
 
 ---
 

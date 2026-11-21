@@ -35,7 +35,7 @@ import ai as rush                                          # noqa: E402  (rush-a
 # The engine deals products out round-robin, so the preview shop mixed milk, bread and apples on
 # every aisle. For this recording the floor is laid out by department instead (OTHER-CITIES.md,
 # planned change 4): dairy in the fridges at the back, produce in the bins near the entrance,
-# bread on the bakery rack, dry goods on the middle shelves. The engine's robots than really do
+# bread on the bakery rack, dry goods on the middle shelves. The engine's robots then really do
 # pick milk from the dairy fridges. Same shelf cells, same count, same products as before.
 # Each block is (x, ys, fixture, department, product types top to bottom).
 DEPARTMENTS = [
