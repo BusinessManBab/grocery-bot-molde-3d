@@ -25,6 +25,11 @@ built for **Molde** with the steps in [OTHER-CITIES.md](OTHER-CITIES.md):
     player's routes, plus the rear loading door, cargo and order tag.
 - The replay is a simulated match with the user's rush-ai, recorded from the engine on the
   Molde map (`tools/simulate_match.py ... 7 molde`).
+- The ten shops are spread east–west along the fjord line (Anevegen in the west to
+  Nøisomhedvegen in the east), and the five replay seats open every other one so the shops
+  fill the whole map. This is not only a replay edit: the game town folder
+  (`town/molde` in `astar-as/grocery-bot`) now stores the same `build.shops` list and a
+  rebuilt `map.json` (`molde-bot-v3`), so a deployment gets the spread shops too.
 
 To make this for another town, follow [OTHER-CITIES.md](OTHER-CITIES.md) (data scripts in
 `tools/build_city.py`).
