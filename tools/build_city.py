@@ -117,8 +117,11 @@ def buildings(args):
             ring = ring[:-1]
         cx = sum(p[0] for p in ring) / len(ring)
         cy = sum(p[1] for p in ring) / len(ring)
+        tags = e.get('tags', {})
         if x0 <= cx <= x1 and y0 <= cy <= y1:
-            blds.append({'ring': ring, 'h': height(e.get('tags', {})), 'c': (cx, cy)})
+            blds.append({'ring': ring, 'h': height(tags), 'c': (cx, cy),
+                         'k': tags.get('building', 'yes'), 'r': tags.get('roof:shape', ''),
+                         'w': tags.get('building:colour', ''), 'rc': tags.get('roof:colour', '')})
     homes, used = [], set()
     for h in town['homes']:
         near = [i for i, b in enumerate(blds) if abs(b['c'][0] - h[0]) < 120 and abs(b['c'][1] - h[1]) < 70]
@@ -129,16 +132,22 @@ def buildings(args):
                 hit = i
         if hit is not None and hit not in used:
             used.add(hit)
-            homes.append({'p': h, 'ring': blds[hit]['ring'], 'h': min(blds[hit]['h'], 14)})
+            b = blds[hit]
+            homes.append({'p': h, 'ring': b['ring'], 'h': min(b['h'], 14),
+                          'k': b['k'], 'r': b['r'], 'w': b['w'], 'rc': b['rc']})
         else:   # no mapped footprint: a 10 x 9 m house at the address
             hx, hy = 5 / 1.11 / sq, 4.5 / 1.11
-            homes.append({'p': h, 'h': 7, 'generic': True, 'ring': [(round(h[0] - hx), round(h[1] - hy)), (round(h[0] + hx), round(h[1] - hy)),
-                                                                   (round(h[0] + hx), round(h[1] + hy)), (round(h[0] - hx), round(h[1] + hy))]})
+            homes.append({'p': h, 'h': 7, 'generic': True, 'k': 'house', 'r': 'gabled', 'w': '', 'rc': '',
+                          'ring': [(round(h[0] - hx), round(h[1] - hy)), (round(h[0] + hx), round(h[1] - hy)),
+                                   (round(h[0] + hx), round(h[1] + hy)), (round(h[0] - hx), round(h[1] + hy))]})
     flat = lambda ring: [c for p in ring for c in p]
     save(os.path.join(args.out, 'buildings.json'), {
         'attribution': 'Buildings: OpenStreetMap contributors (ODbL)',
-        'homes': [{'p': h['p'], 'h': round(h['h']), 'ring': flat(h['ring'])} for h in homes],
-        'buildings': [[round(b['h'])] + flat(b['ring']) for i, b in enumerate(blds) if i not in used]})
+        'homes': [{'p': h['p'], 'h': round(h['h']), 'ring': flat(h['ring']),
+                   'k': h.get('k', 'house'), 'r': h.get('r', ''), 'w': h.get('w', ''), 'rc': h.get('rc', '')} for h in homes],
+        'buildings': [{'h': round(b['h']), 'ring': flat(b['ring']),
+                       'k': b.get('k', 'yes'), 'r': b.get('r', ''), 'w': b.get('w', ''), 'rc': b.get('rc', '')}
+                      for i, b in enumerate(blds) if i not in used]})
     matched = sum(1 for h in homes if not h.get('generic'))
     print(f"{len(blds)} buildings; {matched} of {len(homes)} homes matched to a real footprint")
 

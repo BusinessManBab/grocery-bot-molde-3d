@@ -199,37 +199,173 @@ export async function createWorld3d(opts) {
   }
 
   // ---- buildings ------------------------------------------------------------------
-  // Footprint ring in 1e5-degree ints -> extruded prism (walls + flat roof), as non-indexed triangles.
-  // On a slope the walls start below the lowest corner and the roof sits above the highest one.
-  function prism(ring, height, out) {
+  // Real-world detail without extra draw calls: walls share one repeating window-bay texture,
+  // and small rectangular houses get gable (or mapped hipped) roofs with eaves. Every footprint
+  // still feeds one merged context mesh; order homes keep their own two materials.
+  const BAY = 3.4 * M, STOREY = 3 * M * LIFT, OVERHANG = .7 * M;
+  const SMALL = new Set(['house', 'detached', 'semidetached_house', 'terrace', 'residential', 'cabin', 'farm']);
+  const WALL_TONES = ['#f4efe7', '#efe7d8', '#eadfc8', '#e9e4dc', '#dfe7e8', '#f3ebe1'];
+  const ROOF_TONES = ['#8d8176', '#7f665b', '#747b81', '#7d6d61', '#8d7060', '#6f746f'];
+
+  function facadeTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, 128, 128);
+    // one window bay: a pale reveal, glass and a simple cross bar
+    g.fillStyle = '#e6e1da';
+    g.fillRect(31, 25, 66, 70);
+    g.fillStyle = '#a9c1cf';
+    g.fillRect(37, 31, 54, 58);
+    g.fillStyle = 'rgba(255,255,255,.55)';
+    g.fillRect(44, 37, 16, 46);
+    g.fillStyle = '#f7f4ef';
+    g.fillRect(60, 31, 6, 58);
+    g.fillRect(37, 57, 54, 5);
+    g.fillStyle = '#d0c9c0';
+    g.fillRect(28, 95, 72, 6);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  }
+  const FACADE = facadeTexture();
+  const contextWall = new THREE.MeshLambertMaterial({ map: FACADE, vertexColors: true });
+  const contextRoof = new THREE.MeshLambertMaterial({ vertexColors: true });
+
+  function polygonArea(pts) {
+    let a = 0;
+    for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p.x * q.y - q.x * p.y; }
+    return Math.abs(a) / 2;
+  }
+
+  // Minimum-area rectangle over the ring's edge directions: its fill ratio says whether the
+  // footprint is rectangular enough for a gable roof.
+  function orientedRect(pts) {
+    let best = null;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+      if (len < .01) continue;
+      const ux = dx / len, uy = dy / len;
+      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+      for (const p of pts) {
+        const u = p.x * ux + p.y * uy, v = -p.x * uy + p.y * ux;
+        if (u < minU) minU = u; if (u > maxU) maxU = u;
+        if (v < minV) minV = v; if (v > maxV) maxV = v;
+      }
+      const area = (maxU - minU) * (maxV - minV);
+      if (!best || area < best.area) best = { area, ux, uy, minU, maxU, minV, maxV };
+    }
+    if (!best) return null;
+    best.fill = polygonArea(pts) / (best.area || 1);
+    return best;
+  }
+
+  function lookOf(info, cx, cy) {
+    const seed = Math.abs(Math.round(cx * .31 + cy * .17));
+    const read = (raw, tones, toward, k) => {
+      let c = null;
+      if (raw) { try { c = new THREE.Color(raw); } catch { c = null; } }
+      if (!c) c = new THREE.Color(tones[seed % tones.length]);
+      return c.lerp(new THREE.Color(toward), k);
+    };
+    return { wall: read(info?.w, WALL_TONES, '#ffffff', .25), roof: read(info?.rc, ROOF_TONES, '#8d8881', .25) };
+  }
+
+  // Footprint ring -> wall quads (with window UVs) plus a flat, gable or hipped roof.
+  // tint=false leaves the colours white so a home material can tint them per order state.
+  function buildingGeometry(ring, height, info, tint = true) {
     const pts = [];
     for (let i = 0; i < ring.length; i += 2) pts.push(new THREE.Vector2(wx(ring[i]), wy(ring[i + 1])));
     if (THREE.ShapeUtils.isClockWise(pts)) pts.reverse();
     let lo = Infinity, hi = -Infinity;
     for (const p of pts) { const h = heightAt(p.x, p.y); lo = Math.min(lo, h); hi = Math.max(hi, h); }
     const foot = lo - 1.5, top = hi + height;
-    const walls = [], roof = [];
+    const look = lookOf(info, pts[0].x, pts[0].y);
+    const colour = c => tint ? c : new THREE.Color('#ffffff');
+    const wallColour = colour(look.wall), roofColour = colour(look.roof);
+    const walls = [], wallCols = [], wallUvs = [], roofs = [], roofCols = [];
+    const V3 = (p, y) => new THREE.Vector3(p.x, y, p.y);
+    const wallTri = (a, b, c, cc, uvs) => {
+      walls.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      wallUvs.push(...(uvs || [0, 0, 0, 0, 0, 0]));
+      for (let i = 0; i < 3; i++) wallCols.push(cc.r, cc.g, cc.b);
+    };
+    const roofTri = (a, b, c) => {
+      roofs.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      for (let i = 0; i < 3; i++) roofCols.push(roofColour.r, roofColour.g, roofColour.b);
+    };
+    // Walls: two triangles per edge, distance along the wall and height above ground as UVs.
+    let along = 0;
     for (let i = 0; i < pts.length; i++) {
-      const a = pts[i], b = pts[(i + 1) % pts.length];
-      walls.push(a.x, foot, a.y, a.x, top, a.y, b.x, top, b.y, a.x, foot, a.y, b.x, top, b.y, b.x, foot, b.y);
+      const a = pts[i], b = pts[(i + 1) % pts.length], len = Math.hypot(b.x - a.x, b.y - a.y);
+      const u0 = along / BAY, u1 = (along + len) / BAY, v = height / STOREY;
+      along += len;
+      const A0 = V3(a, foot), B0 = V3(b, foot), B1 = V3(b, top), A1 = V3(a, top);
+      wallTri(A0, B0, B1, wallColour, [u0, 0, u1, 0, u1, v]);
+      wallTri(A0, B1, A1, wallColour, [u0, 0, u1, v, u0, v]);
     }
-    for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(pts, [])) {
-      for (const n of [i, k, j]) roof.push(pts[n].x, top, pts[n].y);
+    // Roof shape: mapped roof:shape wins; otherwise gable only for small rectangular houses.
+    const shape = String(info?.r || '').toLowerCase();
+    const metres = height / (M * LIFT);
+    const obb = orientedRect(pts);
+    const pitched = shape === 'flat' ? false
+      : ['gabled', 'gable', 'hipped', 'half-hipped', 'gambrel'].includes(shape) ? true
+        : metres <= 8.5;
+    const hipped = shape === 'hipped' || shape === 'half-hipped';
+    if (pitched && obb && obb.fill >= .85) {
+      const at = (u, v) => new THREE.Vector2(obb.ux * u - obb.uy * v, obb.uy * u + obb.ux * v);
+      const spanU = obb.maxU - obb.minU, spanV = obb.maxV - obb.minV;
+      const alongU = spanU >= spanV;
+      const u0 = obb.minU - OVERHANG, u1 = obb.maxU + OVERHANG, v0 = obb.minV - OVERHANG, v1 = obb.maxV + OVERHANG;
+      const um = (obb.minU + obb.maxU) / 2, vm = (obb.minV + obb.maxV) / 2;
+      const span = (alongU ? spanV : spanU) / 2 + OVERHANG;
+      const rise = Math.tan(35 * Math.PI / 180) * span;
+      let A, B, C, D, R0, R1;
+      if (alongU) {
+        A = at(u0, v0); B = at(u1, v0); C = at(u1, v1); D = at(u0, v1);
+        R0 = hipped ? at(obb.minU + span, vm) : at(obb.minU, vm);
+        R1 = hipped ? at(obb.maxU - span, vm) : at(obb.maxU, vm);
+      } else {
+        A = at(u0, v0); B = at(u1, v0); C = at(u1, v1); D = at(u0, v1);
+        R0 = hipped ? at(um, obb.minV + span) : at(um, obb.minV);
+        R1 = hipped ? at(um, obb.maxV - span) : at(um, obb.maxV);
+      }
+      const eave = p => V3(p, top);
+      const ridge = p => V3(p, top + rise);
+      const q = (a, b, c, d) => { roofTri(eave(a), eave(b), ridge(c)); roofTri(eave(a), ridge(c), ridge(d)); };
+      q(A, B, R1, R0);
+      q(D, C, R1, R0);
+      const end0a = alongU ? A : A, end0b = alongU ? D : B;
+      const end1a = alongU ? B : D, end1b = alongU ? C : C;
+      if (hipped) {
+        roofTri(eave(end0a), eave(end0b), ridge(R0));
+        roofTri(eave(end1a), eave(end1b), ridge(R1));
+      } else {
+        wallTri(eave(end0a), eave(end0b), ridge(R0), wallColour, null);
+        wallTri(eave(end1a), eave(end1b), ridge(R1), wallColour, null);
+      }
+    } else {
+      for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(pts, [])) {
+        roofTri(V3(pts[k], top), V3(pts[i], top), V3(pts[j], top));
+      }
     }
-    out.walls.push(...walls);
-    out.roof.push(...roof);
-    return { pts, top };
+    return { wallPos: walls, wallCol: wallCols, wallUv: wallUvs, roofPos: roofs, roofCol: roofCols, pts, top };
   }
 
-  function prismGeometry(parts, withGroups) {
+  function buildingMesh(parts, wallMaterial, roofMaterial) {
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute([...parts.walls, ...parts.roof], 3));
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([...parts.wallPos, ...parts.roofPos], 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute([...parts.wallCol, ...parts.roofCol], 3));
+    const uv = new Float32Array((parts.wallPos.length + parts.roofPos.length) / 3 * 2);
+    uv.set(parts.wallUv);
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.computeVertexNormals();
-    if (withGroups) {
-      geo.addGroup(0, parts.walls.length / 3, 0);
-      geo.addGroup(parts.walls.length / 3, parts.roof.length / 3, 1);
-    }
-    return geo;
+    geo.addGroup(0, parts.wallPos.length / 3, 0);
+    geo.addGroup(parts.wallPos.length / 3, parts.roofPos.length / 3, 1);
+    return new THREE.Mesh(geo, [wallMaterial, roofMaterial]);
   }
 
   // Context town: every other mapped building in the bounds, pale so the order homes stand out.
@@ -237,15 +373,15 @@ export async function createWorld3d(opts) {
   const PLAZA = 100;
   const nearShop = (x, z, r = PLAZA) => game.players.some(p => Math.hypot(p.shop[0] - x, p.shop[1] - z) < r);
   {
-    const parts = { walls: [], roof: [] };
+    const parts = { wallPos: [], wallCol: [], wallUv: [], roofPos: [], roofCol: [] };
     for (const b of extra.buildings) {
       let hit = false;
-      for (let i = 1; i < b.length && !hit; i += 2) hit = nearShop(wx(b[i]), wy(b[i + 1]));
+      for (let i = 0; i < b.ring.length && !hit; i += 2) hit = nearShop(wx(b.ring[i]), wy(b.ring[i + 1]));
       if (hit) continue;
-      const h = b[0] * M * LIFT;
-      prism(b.slice(1), h, parts);
+      const g = buildingGeometry(b.ring, b.h * M * LIFT, b, true);
+      for (const key of Object.keys(parts)) parts[key].push(...g[key]);
     }
-    const mesh = new THREE.Mesh(prismGeometry(parts, false), litBoth(PALETTE.town));
+    const mesh = buildingMesh(parts, contextWall, contextRoof);
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.renderOrder = 20;
     scene.add(mesh);
@@ -301,11 +437,12 @@ export async function createWorld3d(opts) {
 
   // Order homes: the real footprint at each address the game delivers to.
   const homes = extra.homes.map((home, i) => {
-    const parts = { walls: [], roof: [] };
     const height = Math.max(7, home.h) * M * LIFT;
-    const { pts, top } = prism(home.ring, height, parts);
-    const wall = litBoth(PALETTE.homeWall), roof = litBoth(PALETTE.home);
-    const mesh = new THREE.Mesh(prismGeometry(parts, true), [wall, roof]);
+    const g = buildingGeometry(home.ring, height, home, false);
+    const { pts, top } = g;
+    const wall = new THREE.MeshLambertMaterial({ map: FACADE, vertexColors: true, color: PALETTE.homeWall });
+    const roof = new THREE.MeshLambertMaterial({ vertexColors: true, color: PALETTE.home });
+    const mesh = buildingMesh(g, wall, roof);
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.renderOrder = 21;
     scene.add(mesh);

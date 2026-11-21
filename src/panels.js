@@ -2,7 +2,7 @@
 // order card (left: what a clicked order is, how long ago, how happy). Both read data/shop.json
 // and data/shop.bin, recorded from the engine alongside the public feed (tools/simulate_match.py).
 import { botSvg } from './looks.js';
-import { createIsoShop } from './shop-iso.js?v=22';
+import { createIsoShop } from './shop-iso.js?v=23';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -28,6 +28,15 @@ export async function createPanels({ game, play, you }) {
   if (!data || !bin) return null;               // towns without recorded shop data: no panels
   const frames = new Uint8Array(bin);
   const state = { seat: you ?? null, open: false, order: null, lastCard: '' };
+  // Which department each product belongs to, in the order a robot walks the shop.
+  const deptOf = {};
+  for (const [x, y, p] of data.items || []) {
+    const name = data.products[p];
+    if (deptOf[name]) continue;
+    const dept = (data.departments || []).find(d => (d.cells || []).some(([dx, dy]) => dx === x && dy === y));
+    if (dept) deptOf[name] = dept.name;
+  }
+  const deptOrder = (data.departments || []).map(d => d.name);
 
   // ---- shop window: the v1 store animation (shop-iso.js), driven by the recorded match ----
   const win = $('shopwin'), iso = createIsoShop($('shop-svg'), data);
@@ -198,13 +207,27 @@ export async function createPanels({ game, play, you }) {
     } else timing = '';
     const counts = {};
     for (const item of order.items) counts[item] = (counts[item] || 0) + 1;
-    const items = Object.entries(counts).map(([name, n]) => `<li><i style="background:${productColour(name)}"></i>${n > 1 ? `${n} × ` : ''}${escape(name)}</li>`).join('');
+    const chip = ([name, n]) => `<li><i style="background:${productColour(name)}"></i>${n > 1 ? `${n} × ` : ''}${escape(name)}</li>`;
+    // Group by department in shop-walk order, so the card reads like the picking route.
+    let items;
+    if (deptOrder.length) {
+      const groups = new Map(deptOrder.map(name => [name, []]));
+      for (const entry of Object.entries(counts)) {
+        const dept = deptOf[entry[0]];
+        if (!groups.has(dept)) groups.set(dept || 'Other', []);
+        groups.get(dept || 'Other').push(entry);
+      }
+      items = [...groups].filter(([, list]) => list.length).map(([name, list]) =>
+        `<div class="g-order-group"><span class="g-order-dept">${escape(name)}</span><ul class="g-order-items">${list.map(chip).join('')}</ul></div>`).join('');
+    } else {
+      items = `<ul class="g-order-items">${Object.entries(counts).map(chip).join('')}</ul>`;
+    }
     const points = s.status === 'delivered' ? `+${order.points} points${order.rushBonus ? ` (incl. ${order.rushBonus} rush-hour bonus)` : ''}` : `Worth ${order.reward} points on time`;
     const html = `
       <header><h2>Order ${escape(state.order)}</h2><button class="g-x" id="order-close" type="button" aria-label="Close order">×</button></header>
       <p class="g-order-where">${escape(order.address)}</p>
       <p class="g-order-status" style="--seat:${owner ? owner.colour : '#735536'}">${owner ? `<button type="button" class="g-order-shop" data-seat="${s.seat}">${escape(detail)}</button>` : escape(detail)}</p>
-      <h3>${order.items.length} item${order.items.length === 1 ? '' : 's'}</h3><ul class="g-order-items">${items}</ul>
+      <h3>${order.items.length} item${order.items.length === 1 ? '' : 's'}</h3>${items}
       <dl>
         <div><dt>Ordered</dt><dd>${clockText(dayAt(order.placed))}, ${span(head - order.placed)} ago</dd></div>
         ${timing ? `<div><dt>Time</dt><dd>${escape(timing)}</dd></div>` : ''}

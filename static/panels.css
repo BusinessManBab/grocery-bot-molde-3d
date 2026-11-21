@@ -26,6 +26,9 @@ body.has-shop .g-board { max-height: calc(100% - 76px - 88px - 14px - var(--shop
 .g-order-items { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px; }
 .g-order-items li { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border: 1px solid var(--line); border-radius: 999px; background: #fff; font-weight: 700; font-size: 12px; }
 .g-order-items i { width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(23, 20, 18, .15); }
+.g-order-group { margin-top: 7px; display: grid; gap: 4px; }
+.g-order-dept { font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.g-order-group .g-order-items { margin-top: 0; }
 .g-order dl { margin: 10px 0 0; display: grid; gap: 6px; }
 .g-order dl div { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: baseline; }
 .g-order dt { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }

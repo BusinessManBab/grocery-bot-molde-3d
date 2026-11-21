@@ -17,6 +17,7 @@ inside it, so the board does not end in a blank strip.
   downstream. Tree density rises gradually towards the northern hills and fades across OSM
   forest edges instead of stopping at a hard line.
 - Bridges: roads cross water on raised decks with railings and piers; trucks drive over them.
+- Clicking a player in **Standings** opens that player's shop window too (or reopens it after ×).
 - Shop window (bottom right): the v1 grocerybot.no store animation (Erik's `arena.js`, ported
   to `src/shop-iso.js`) showing the robots and trucks inside a shop as the match plays, switched
   by clicking any shop; order card (left) when you click an order house.
