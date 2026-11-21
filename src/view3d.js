@@ -232,8 +232,8 @@ export async function createWorld3d(opts) {
     return t;
   }
   const FACADE = facadeTexture();
-  const contextWall = new THREE.MeshLambertMaterial({ map: FACADE, vertexColors: true });
-  const contextRoof = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const contextWall = new THREE.MeshLambertMaterial({ map: FACADE, vertexColors: true, side: THREE.DoubleSide });
+  const contextRoof = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
 
   function polygonArea(pts) {
     let a = 0;
@@ -288,13 +288,32 @@ export async function createWorld3d(opts) {
     const wallColour = colour(look.wall), roofColour = colour(look.roof);
     const walls = [], wallCols = [], wallUvs = [], roofs = [], roofCols = [];
     const V3 = (p, y) => new THREE.Vector3(p.x, y, p.y);
-    const wallTri = (a, b, c, cc, uvs) => {
-      walls.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-      wallUvs.push(...(uvs || [0, 0, 0, 0, 0, 0]));
+    let centreX = 0, centreZ = 0;
+    for (const p of pts) { centreX += p.x; centreZ += p.y; }
+    centreX /= pts.length; centreZ /= pts.length;
+    // Keep the winding outward: walls face away from the footprint centre, roof faces point up.
+    const wallTri = (a, b, c, cc, uvs, outward) => {
+      let bb = b, cc2 = c, uv = uvs;
+      const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+      const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+      const nx = uy * vz - uz * vy, nz = ux * vy - uy * vx;
+      const mx = outward ? outward.x : (a.x + b.x + c.x) / 3 - centreX;
+      const mz = outward ? outward.y : (a.z + b.z + c.z) / 3 - centreZ;
+      if (nx * mx + nz * mz < 0) {
+        bb = c; cc2 = b;
+        if (uvs) uv = [uvs[0], uvs[1], uvs[4], uvs[5], uvs[2], uvs[3]];
+      }
+      walls.push(a.x, a.y, a.z, bb.x, bb.y, bb.z, cc2.x, cc2.y, cc2.z);
+      wallUvs.push(...(uv || [0, 0, 0, 0, 0, 0]));
       for (let i = 0; i < 3; i++) wallCols.push(cc.r, cc.g, cc.b);
     };
     const roofTri = (a, b, c) => {
-      roofs.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      let bb = b, cc2 = c;
+      const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+      const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+      const ny = uz * vx - ux * vz;
+      if (ny < 0) { bb = c; cc2 = b; }
+      roofs.push(a.x, a.y, a.z, bb.x, bb.y, bb.z, cc2.x, cc2.y, cc2.z);
       for (let i = 0; i < 3; i++) roofCols.push(roofColour.r, roofColour.g, roofColour.b);
     };
     // Walls: two triangles per edge, distance along the wall and height above ground as UVs.
@@ -304,8 +323,9 @@ export async function createWorld3d(opts) {
       const u0 = along / BAY, u1 = (along + len) / BAY, v = height / STOREY;
       along += len;
       const A0 = V3(a, foot), B0 = V3(b, foot), B1 = V3(b, top), A1 = V3(a, top);
-      wallTri(A0, B0, B1, wallColour, [u0, 0, u1, 0, u1, v]);
-      wallTri(A0, B1, A1, wallColour, [u0, 0, u1, v, u0, v]);
+      const outward = new THREE.Vector2(b.y - a.y, -(b.x - a.x));
+      wallTri(A0, B0, B1, wallColour, [u0, 0, u1, 0, u1, v], outward);
+      wallTri(A0, B1, A1, wallColour, [u0, 0, u1, v, u0, v], outward);
     }
     // Roof shape: mapped roof:shape wins; otherwise gable only for small rectangular houses.
     const shape = String(info?.r || '').toLowerCase();
@@ -440,8 +460,8 @@ export async function createWorld3d(opts) {
     const height = Math.max(7, home.h) * M * LIFT;
     const g = buildingGeometry(home.ring, height, home, false);
     const { pts, top } = g;
-    const wall = new THREE.MeshLambertMaterial({ map: FACADE, vertexColors: true, color: PALETTE.homeWall });
-    const roof = new THREE.MeshLambertMaterial({ vertexColors: true, color: PALETTE.home });
+    const wall = new THREE.MeshLambertMaterial({ map: FACADE, vertexColors: true, color: PALETTE.homeWall, side: THREE.DoubleSide });
+    const roof = new THREE.MeshLambertMaterial({ vertexColors: true, color: PALETTE.home, side: THREE.DoubleSide });
     const mesh = buildingMesh(g, wall, roof);
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.renderOrder = 21;
