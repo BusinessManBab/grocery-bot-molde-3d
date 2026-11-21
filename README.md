@@ -9,8 +9,8 @@ built for **Molde** with the steps in [OTHER-CITIES.md](OTHER-CITIES.md):
 - The real street network, water, the fjord and its islands, green areas and place names from
   OpenStreetMap (`data/game-map.json`), with 84 of 90 delivery homes matched to real building
   footprints (`data/buildings.json`). The map is padded south across Moldefjorden so the board is
-  roughly square and Hjertøya, the island across the water, is on it. The west edge is trimmed to the westernmost shop (Kale Storm), so the board does not end in a
-blank strip.
+  roughly square and Hjertøya, the island across the water, is on it. The west edge is trimmed to the detailed part of town, and Kale Storm sits about a kilometre
+inside it, so the board does not end in a blank strip.
 - Sea, lakes and the Moldeelva river; no trees on or next to water; the river streaks run
   downstream.
 - Bridges: roads cross water on raised decks with railings and piers; trucks drive over them.
@@ -26,9 +26,9 @@ blank strip.
     player's routes, plus the rear loading door, cargo and order tag.
 - The replay is a simulated match with the user's rush-ai, recorded from the engine on the
   Molde map (`tools/simulate_match.py ... 7 molde`).
-- The ten shops are spread east–west along the fjord line (Anevegen in the west to
+- The ten shops are spread east–west along the fjord line (Bjørsetsletta in the west to
   Nøisomhedvegen in the east), and the five replay seats open every other one so the shops
-  fill the whole map. This is not only a replay edit: the game town folder
+  fill the whole map. Road lines are clipped to the board so no street runs off the edge. This is not only a replay edit: the game town folder
   (`town/molde` in `astar-as/grocery-bot`) now stores the same `build.shops` list and a
   rebuilt `map.json` (`molde-bot-v3`), so a deployment gets the spread shops too.
 

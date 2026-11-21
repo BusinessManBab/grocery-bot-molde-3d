@@ -1,10 +1,12 @@
 """Play a 5-seat Town Rush match with the real engine and export what the preview needs.
 
-    python3 tools/simulate_match.py ENGINE_DIR RUSH_AI_DIR OUT_DIR [seed] [town]
+    python3 tools/simulate_match.py ENGINE_DIR RUSH_AI_DIR OUT_DIR [seed] [town] [ticks]
 
 ENGINE_DIR: prototypes/town-rush of a checkout (codex/town-rush-launch-fixes matches live).
 TOWN: a town id the engine knows (default: the engine's default town). The preview's Molde
       data was recorded with `... data 7 molde`.
+TICKS: match length (default: the difficulty's full day). The Molde recording uses 450 so it
+       finishes in a reasonable time on a busy machine.
 Seats: the user's rush-ai (in-process, same interface as the CLI), two ReferenceBots and two
 StarterBots. Outputs:
   game.json   the public feed (engine.feed.from_replay, exactly what /api/games serves) + looks
@@ -22,6 +24,7 @@ import sys
 ENGINE, RUSH, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 SEED = int(sys.argv[4]) if len(sys.argv) > 4 else 7
 TOWN = sys.argv[5] if len(sys.argv) > 5 else None
+TICKS = int(sys.argv[6]) if len(sys.argv) > 6 else None
 sys.path.insert(0, ENGINE)
 sys.path.insert(1, RUSH)
 
@@ -81,7 +84,7 @@ SEATS = [('p1', 'Kale Storm', ReferenceBot), ('p2', 'Oat Runner', StarterBot), (
 ACTIONS = {'wait': 0, 'move_up': 1, 'move_down': 1, 'move_left': 1, 'move_right': 1, 'pick_up': 2, 'load': 3, 'drop_off': 3}
 
 state = simulation.create_match(seed=SEED, difficulty='medium', players=[{'id': i, 'name': n} for i, n, _ in SEATS],
-                                match_id='PREVIEW', town=TOWN)
+                                match_id='PREVIEW', town=TOWN, ticks=TICKS)
 bots = {}
 for pid, _, kind in SEATS:
     start = match_start(state, pid)
