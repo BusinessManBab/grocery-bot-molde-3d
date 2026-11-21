@@ -12,7 +12,8 @@ built for **Molde** with the steps in [OTHER-CITIES.md](OTHER-CITIES.md):
   roughly square and Hjertøya, the island across the water, is on it. The west edge is trimmed to the detailed part of town, and Kale Storm sits about a kilometre
 inside it, so the board does not end in a blank strip.
 - Sea, lakes and the Moldeelva river; no trees on or next to water; the river streaks run
-  downstream.
+  downstream. Tree density rises gradually towards the northern hills and fades across OSM
+  forest edges instead of stopping at a hard line.
 - Bridges: roads cross water on raised decks with railings and piers; trucks drive over them.
 - Shop window (bottom right): the v1 grocerybot.no store animation (Erik's `arena.js`, ported
   to `src/shop-iso.js`) showing the robots and trucks inside a shop as the match plays, switched

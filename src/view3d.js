@@ -598,9 +598,10 @@ export async function createWorld3d(opts) {
   }
 
   // ---- forests: where OSM maps forest or wood, and on empty land away from town -------------
-  // Around Kongsberg most land the map leaves empty is spruce forest in real life. Fields, meadows,
-  // built-up areas, parks (they have their own trees), roads, water and land near buildings stay clear.
-  // Two instanced meshes for every tree, about 20 triangles each, so the forest stays cheap to draw.
+  // Tree density ramps up towards the north of the board and fades across the OSM forest edge, so
+  // the woods blend into the open hills instead of ending on a hard line. Fields, meadows,
+  // built-up areas, parks (they have their own trees), roads, water and land near buildings stay
+  // clear. Two instanced meshes for every tree, about 20 triangles each, so the forest stays cheap.
   const forest = [];
   {
     let seed = 23;
@@ -614,6 +615,22 @@ export async function createWorld3d(opts) {
     });
     const within = (list, x, z) => list.some(p => x >= p.box[0] && x <= p.box[2] && z >= p.box[1] && z <= p.box[3] && inside([x, z], p.pts));
     const wood = poly(cover.wood), open = poly(cover.open), parks = poly(town.green);
+    // A coarse wood mask, then a 3 × 3 average: the OSM edge becomes a ~50 m fade instead of a line.
+    const WCELL = 18, wcols = Math.ceil(W / WCELL), wrows = Math.ceil(D / WCELL);
+    const woodMask = new Uint8Array(wcols * wrows);
+    for (let r = 0; r < wrows; r++) for (let c = 0; c < wcols; c++) {
+      if (within(wood, X0 + (c + .5) * WCELL, Z0 + (r + .5) * WCELL)) woodMask[r * wcols + c] = 1;
+    }
+    const woodAt = (x, z) => {
+      const c0 = Math.floor((x - X0) / WCELL), r0 = Math.floor((z - Z0) / WCELL);
+      let sum = 0, count = 0;
+      for (let r = r0 - 1; r <= r0 + 1; r++) for (let c = c0 - 1; c <= c0 + 1; c++) {
+        if (c < 0 || r < 0 || c >= wcols || r >= wrows) continue;
+        sum += woodMask[r * wcols + c];
+        count++;
+      }
+      return count ? sum / count : 0;
+    };
     // "town": within ~35 m of any building
     const cell = 8, cols = Math.ceil(W / cell), rows = Math.ceil(D / cell), near = new Uint8Array(cols * rows), R = 4;
     for (const b of extra.buildings) for (let i = 1; i < b.length; i += 2) {
@@ -621,15 +638,23 @@ export async function createWorld3d(opts) {
       for (let rr = Math.max(0, r - R); rr <= Math.min(rows - 1, r + R); rr++) for (let cc = Math.max(0, c - R); cc <= Math.min(cols - 1, c + R); cc++) near[rr * cols + cc] = 1;
     }
     const inTown = (x, z) => near[Math.floor((z - Z0) / cell) * cols + Math.floor((x - X0) / cell)] === 1;
-    const STEP = 11;
-    for (let z = Z0 + STEP / 2; z < Z1 && forest.length < 22000; z += STEP) for (let x = X0 + STEP / 2; x < X1; x += STEP) {
+    const STEP = 11, LIMIT = 22000;
+    for (let z = Z0 + STEP / 2; z < Z1; z += STEP) for (let x = X0 + STEP / 2; x < X1; x += STEP) {
       const px = x + (rand() - .5) * STEP * .9, pz = z + (rand() - .5) * STEP * .9;
       if (px < X0 + 3 || px > X1 - 3 || pz < Z0 + 3 || pz > Z1 - 3) continue;
       if (blocked(px, pz) || isWater(px, pz) || isWater(px + 8, pz) || isWater(px - 8, pz) || isWater(px, pz + 8) || isWater(px, pz - 8)) continue;
-      const mapped = within(wood, px, pz);
+      const mapped = woodAt(px, pz);
       if (!mapped && (inTown(px, pz) || within(open, px, pz) || within(parks, px, pz))) continue;
-      if (rand() > (mapped ? .85 : .7)) continue;
-      forest.push([px, pz, .8 + rand() * .7, rand(), rand() < .78]);
+      // More and more trees towards the north (top) of the board; the wood mask adds on top.
+      const rise = clamp((Z1 - pz) / D, 0, 1);
+      const density = Math.min(.96, .08 + .58 * rise * rise * (3 - 2 * rise) + .34 * mapped);
+      if (rand() > density) continue;
+      forest.push([px, pz, .8 + rand() * .7, rand(), rand() < .78, rand()]);
+    }
+    // Keep the drawing budget without a geographic cut-off: thinning is spread over the whole map.
+    if (forest.length > LIMIT) {
+      forest.sort((a, b) => a[5] - b[5]);
+      forest.length = LIMIT;
     }
     const spruce = forest.filter(t => t[4]), birch = forest.filter(t => !t[4]);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
