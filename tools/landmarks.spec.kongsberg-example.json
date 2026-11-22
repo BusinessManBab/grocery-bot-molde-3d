@@ -1,0 +1,17 @@
+{
+  "town": "Kongsberg",
+  "notes": "Kongsberg's trademarks: Numedalslågen rushing through the middle of town over Nybrufossen, with the silver-mining heritage beside it (the Mining Museum in the old smelting works, the Royal Mint), and Kongsberg Church, Norway's largest baroque church (1761, red brick, cross-shaped, tower on the cross arm behind the altarpiece).",
+  "sites": [
+    { "id": "nybrufossen", "name": "Nybrufossen", "model": "rapids", "at": [9.65052, 59.66726],
+      "line": [[9.64815, 59.66795], [9.64903, 59.66768], [9.64955, 59.66754], [9.65052, 59.66726], [9.65109, 59.66677], [9.65234, 59.66627], [9.65268, 59.66607]],
+      "falls": [[9.64955, 59.66754], [9.65052, 59.66726], [9.65109, 59.66677]] },
+    { "id": "kongsberg-kirke", "name": "Kongsberg kirke", "model": "church", "osm": "r14884037", "at": [9.6463, 59.66581],
+      "wall": "#9b4c3c", "roof": "#474a4d", "height": 17, "tower": "east", "towerTop": 34, "cap": "#3d4144", "spire": 52 },
+    { "id": "bergverksmuseet", "name": "Norsk Bergverksmuseum", "model": "outline", "osm": "r2109570", "at": [9.65061, 59.66607],
+      "facade": "castle", "wall": "#d8cdb6", "roof": "#5d5552", "height": 11 }
+  ],
+  "places": [
+    { "name": "Den Kongelige Mynt", "lon": 9.64956, "lat": 59.6665 },
+    { "name": "Kongsberg stasjon", "lon": 9.65056, "lat": 59.6722 }
+  ]
+}

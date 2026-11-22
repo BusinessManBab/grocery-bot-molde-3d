@@ -1,0 +1,19 @@
+{
+  "town": "Molde",
+  "notes": "Molde's trademarks on the waterfront and in the centre: Aker Stadion (Kjell Kosberg, 1998), Molde FK's ground on the fjord shore at Reknes, a continuous two-tier bowl with rounded corners under a dark grey curved roof, granite and glass facade, blue seats; Scandic Seilet (Kosberg, 2002), the 16-storey glass hotel shaped like a sail on piles in the fjord, its mast at the prow (82 m with the mast); Molde domkirke (Finn Bryn, 1957), a white concrete long church with a steep red tile roof and its free-standing 50 m white campanile with a copper pyramid spire and clock gables.",
+  "sites": [
+    { "id": "aker-stadion", "name": "Aker Stadion", "model": "stadium", "osm": "r9108199", "at": [7.14807, 62.73339],
+      "facade": "#cfd0cc", "roof": "#5d6266", "seats": "#2f62ad", "facadeTop": 10, "standTop": 13.5, "roofTop": 18 },
+    { "id": "seilet", "name": "Scandic Seilet", "model": "seilet", "osm": "w88452674", "at": [7.14391, 62.7331],
+      "height": 54, "mast": 82, "prow": [7.14383, 62.73297], "taper": 0.45 },
+    { "id": "domkirke", "name": "Molde domkirke", "model": "domkirke", "osm": "w310662273", "at": [7.16035, 62.73837],
+      "wall": "#f1efe8", "roof": "#c4532f", "eaves": 13, "ridge": 25 },
+    { "id": "klokketarn", "name": "Molde domkirke klokketårn", "model": "campanile", "osm": "w230972703", "at": [7.1599, 62.7381],
+      "place": false, "wall": "#f1efe8", "cap": "#5f8a74", "height": 50, "roofHeight": 25 }
+  ],
+  "places": [
+    { "name": "Romsdalsmuseet", "lon": 7.15081, "lat": 62.73968 },
+    { "name": "Varden", "lon": 7.12624, "lat": 62.74831 },
+    { "name": "Hjertøya", "lon": 7.15359, "lat": 62.71591 }
+  ]
+}

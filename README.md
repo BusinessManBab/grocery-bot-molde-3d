@@ -6,8 +6,6 @@ built for **Molde** with the steps in [OTHER-CITIES.md](OTHER-CITIES.md):
 - Real terrain: the 3D map is draped over an elevation grid of Molde (`data/terrain.bin`,
   817 × 576 samples, 0–443 m, relief ×1.25). Roads, buildings, trees, shops, trucks
   (pitched on slopes) and trails follow the ground; the board edge shows the hills in section.
-- Aker Stadion uses its real OSM multipolygon: a blue stand ring around the green pitch, with
-the pitch outline and centre circle, and no trees on the footprint (`data/stadium.json`).
 - The real street network, water, the fjord and its islands, green areas and place names from
   OpenStreetMap (`data/game-map.json`), with 84 of 90 delivery homes matched to real building
   footprints (`data/buildings.json`). The map is padded south across Moldefjorden so the board is
@@ -35,6 +33,38 @@ inside it, so the board does not end in a blank strip.
   fill the whole map. Road lines are clipped to the board so no street runs off the edge. This is not only a replay edit: the game town folder
   (`town/molde` in `astar-as/grocery-bot`) now stores the same `build.shops` list and a
   rebuilt `map.json` (`molde-bot-v3`), so a deployment gets the spread shops too.
+
+## Landmarks
+
+Molde's trademarks are modelled by hand in `src/landmarks.js` (MODELS `stadium`, `seilet`,
+`domkirke`, `campanile`) on their real OpenStreetMap outlines, from `tools/landmarks.spec.json`
+(`node tools/bake_landmarks.mjs` writes `data/landmarks.json` and the explore menu's
+`data/places.json`):
+
+- **Aker Stadion** (Kjell Kosberg, 1998) on the fjord shore at Reknes: the continuous two-tier
+  bowl with rounded corners on the OSM stadium ring (outer facade, inner pitch edge), granite and
+  glass facade, blue seats with a walkway between the tiers, the dark grey roof curving up from
+  the facade and out over the stands, and the pitch with its markings. (It replaces the old
+  `data/stadium.json` drawing.)
+- **Scandic Seilet** (Kosberg, 2002), the sail-shaped 16-storey glass hotel on piles in the fjord:
+  its outline tapers towards the prow as it rises, so the prow edge stays vertical and the mast
+  in front of it reaches 82 m.
+- **Molde domkirke** (Finn Bryn, 1957): white concrete long church, nave under a steep red tile
+  roof (ridge 25 m) above the lower foyer and wings, rose window in the west gable, apse in the
+  east; and the free-standing 50 m **campanile**: white shaft with balconies over a dark stone
+  base, copper pyramid spire (25 m, OSM `roof:height`) with a clock gable on each side.
+- Explore menu also flies to Romsdalsmuseet, Varden and Hjertøya.
+
+All of it is one mesh per material: 6 draw calls and about 4k triangles.
+
+## Loading
+
+The Oslo fast-load engine: `tools/bake_buildings.mjs` packs the buildings into chunked
+`data/buildings.bin` + `data/homes.json` (shared walls kept on one side only, footprints a landmark
+replaces dropped), `tools/bake_trees.cjs` bakes `data/trees.bin` (run it where Chromium has a GPU),
+and the page builds chunk meshes in module workers nearest-first (`src/city-stream.js`). Order:
+landmarks, buildings, trees. Measured on a GTX 1070: 3D view with all 8,103 buildings in about
+2.9 s, 60 fps; no flicker between sub-pixel camera moves.
 
 To make this for another town, follow [OTHER-CITIES.md](OTHER-CITIES.md) (data scripts in
 `tools/build_city.py`).

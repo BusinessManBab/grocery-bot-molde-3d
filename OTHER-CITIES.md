@@ -385,6 +385,18 @@ dairy fridges, fruit and vegetables only in the bins, bread only on the rack. Ro
 milk have just come from the dairy fridges. Run the game's tests and a benchmark after the engine
 change, and compare walking distance per order with the old layout.
 
+## Landmarks (the town's trademarks)
+
+Pick 2-4 buildings or areas the town is known for, inside the map bounds (OSM features with a
+`wikidata` tag are a good start: `nwr[wikidata][!highway][!place](S,W,N,E)`), and check shape,
+colours and heights against photos and reliable sources. List them in `tools/landmarks.spec.json`
+(`id`, `name`, `model`, `at`, `osm` outline, plus the model's own fields) and run
+`node tools/bake_landmarks.mjs`, then `node tools/bake_buildings.mjs` and the tree bake. Generic
+models: `church`, `outline`, `rapids`; a signature shape gets its own function in `MODELS` in
+`src/landmarks.js` (Molde: `stadium`, `seilet`, `domkirke`, `campanile`). Keep everything in the
+shared material buckets (a handful of draw calls, well under 30k triangles), and never put two
+faces in the same plane (offset details at least 0.25 m).
+
 ## Settings you may want to change per town
 
 All of these are constants in `src/view3d.js`; search for the name.
